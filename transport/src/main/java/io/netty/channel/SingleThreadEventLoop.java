@@ -30,7 +30,6 @@ import java.util.concurrent.ThreadFactory;
 
 /**
  * Abstract base class for {@link EventLoop}s that execute all its submitted tasks in a single thread.
- *
  */
 public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor implements EventLoop {
 
@@ -73,31 +72,56 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
         return (EventLoopGroup) super.parent();
     }
 
+    // 注册一个Chanel
+
+    @Override
+    public ChannelFuture register(Channel channel) {
+        // 创建一个DefaultChannelPromise，再注册，目的是让用户可以在注册完成时收到通知
+        return register(new DefaultChannelPromise(channel, this));
+    }
+
+    /**
+     * register acceprt event to selector
+     *
+     * @param promise
+     * @return
+     */
+    @Override
+    public ChannelFuture register(final ChannelPromise promise) {
+        ObjectUtil.checkNotNull(promise, "promise");
+        // 转交给Channel.Unsafe完成
+        // register()操作的目的其实就是将JDK的SocketChannel注册到Selector多路复用器上，
+        // 由于需要和底层API交互，于是转交给Channel.Unsafe处理，源码在io.netty.channel.AbstractChannel.AbstractUnsafe#register()
+        promise.channel().unsafe().register(this, promise);
+        return promise;
+    }
+
     @Override
     public EventLoop next() {
         return (EventLoop) super.next();
     }
 
-    @Override
-    public ChannelFuture register(Channel channel) {
-        return register(new DefaultChannelPromise(channel, this));
-    }
-
-    @Override
-    public ChannelFuture register(final ChannelPromise promise) {
-        ObjectUtil.checkNotNull(promise, "promise");
-        promise.channel().unsafe().register(this, promise);
-        return promise;
-    }
-
     @Deprecated
     @Override
     public ChannelFuture register(final Channel channel, final ChannelPromise promise) {
-        ObjectUtil.checkNotNull(promise, "promise");
-        ObjectUtil.checkNotNull(channel, "channel");
-        channel.unsafe().register(this, promise);
+        try {
+            channel.unsafe().register(this, promise);
+            ObjectUtil.checkNotNull(promise, "promise");
+            ObjectUtil.checkNotNull(channel, "channel");
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
         return promise;
     }
+
+
+
+
+
+
+
+
 
     /**
      * Adds a task to be run once at the end of next (or current) {@code eventloop} iteration.
@@ -124,7 +148,6 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
      * Removes a task that was added previously via {@link #executeAfterEventLoopIteration(Runnable)}.
      *
      * @param task to be removed.
-     *
      * @return {@code true} if the task was removed as a result of this call.
      */
     @UnstableApi
@@ -159,9 +182,9 @@ public abstract class SingleThreadEventLoop extends SingleThreadEventExecutor im
 
     /**
      * @return read-only iterator of active {@link Channel}s registered with this {@link EventLoop}.
-     *         The returned value is not guaranteed to be exact accurate and
-     *         should be viewed as a best effort. This method is expected to be called from within
-     *         event loop.
+     * The returned value is not guaranteed to be exact accurate and
+     * should be viewed as a best effort. This method is expected to be called from within
+     * event loop.
      * @throws UnsupportedOperationException if operation is not supported by implementation.
      */
     @UnstableApi

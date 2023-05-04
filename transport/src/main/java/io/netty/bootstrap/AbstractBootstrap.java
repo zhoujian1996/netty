@@ -58,6 +58,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     volatile EventLoopGroup group;
     @SuppressWarnings("deprecation")
+    // 创建Channel的类
     private volatile ChannelFactory<? extends C> channelFactory;
     private volatile SocketAddress localAddress;
 
@@ -104,8 +105,12 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * The {@link Class} which is used to create {@link Channel} instances from.
      * You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
      * {@link Channel} implementation has no no-args constructor.
+     *  使用ChannelFactory创建channel，需要提供channel类型，比如传入
+     *  ServerBootStap,此处的B为ServerBootSrap 、C为ServerChannel(NioSocketServerChannel)
+     *   将NioServerSocketChannel作为ReflectiveChannelFactory 的构造方法的参数创建出一个 ReflectiveChannelFactory
      */
     public B channel(Class<? extends C> channelClass) {
+        // ReflectiveChannelFactory 通过反射的方式创建channelFactory中的Channle
         return channelFactory(new ReflectiveChannelFactory<C>(
                 ObjectUtil.checkNotNull(channelClass, "channelClass")
         ));
@@ -113,6 +118,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     /**
      * @deprecated Use {@link #channelFactory(io.netty.channel.ChannelFactory)} instead.
+     * 为ChannelFactory赋值
      */
     @Deprecated
     public B channelFactory(ChannelFactory<? extends C> channelFactory) {
@@ -264,25 +270,36 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * Create a new {@link Channel} and bind it.
      */
     public ChannelFuture bind(SocketAddress localAddress) {
-        validate();
+        validate(); // 验证必要的参数
         return doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
-        final ChannelFuture regFuture = initAndRegister();
+        // init是什么意思？
+        // register? 将channel注册到selector上channel:jdk中的channel，selector是jdk中selector,
+        //
+        final ChannelFuture regFuture = initAndRegister(); // 注册，初始化channel后注册到Selector(NioEventLoop)上
         final Channel channel = regFuture.channel();
+
+
         if (regFuture.cause() != null) {
             return regFuture;
         }
 
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
+            /**
+             * 在调用doBind0(...)方法的时候， 是通过包装一个
+             * Runnable进行异步化的， 至于为什么这么做， 我们在后续分析Netty的线
+             * 程模型时会介绍。
+             */
             ChannelPromise promise = channel.newPromise();
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
+
             regFuture.addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture future) throws Exception {
@@ -304,10 +321,16 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
     }
 
+    /**
+     *
+     * @return
+     */
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
-            channel = channelFactory.newChannel();
+            // 1、创建服务端channel，并在底层创建JDK channel,NioServerSocketChannel中的 ch
+            channel = channelFactory.newChannel(); //channelFactory是创建Channel的工厂， channelFactory是通过反射构建的
+            // 2、初始化服务端channel，其实init也没有启动服务， 只是初始化了一些基本配置和属性， 以及在服务端的启动逻辑中加入了一个接入器， 用来专门接收新连接。
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -319,7 +342,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             // as the Channel is not registered yet we need to force the usage of the GlobalEventExecutor
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
-
+       // 3、注册服务端channel，调用NioEventLoop中的register。
+        /**
+         * 服务端启动在这一步做的事情， 就是把前面创建的JDK的Channel注册到Selector，
+         * 并且把Netty领域的Channel当作一个attachment绑定上去， 同时回调handlerAdded和channelRegistered事件。
+         */
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
@@ -343,12 +370,24 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     abstract void init(Channel channel) throws Exception;
 
+    /**
+     *
+     * @param regFuture
+     * @param channel
+     * @param localAddress
+     * @param promise
+     */
     private static void doBind0(
             final ChannelFuture regFuture, final Channel channel,
             final SocketAddress localAddress, final ChannelPromise promise) {
 
         // This method is invoked before channelRegistered() is triggered.  Give user handlers a chance to set up
         // the pipeline in its channelRegistered() implementation.
+        /**
+         * 我们发现， 在调用doBind0(...)方法的时候， 是通过包装一个
+         * Runnable进行异步化的， 至于为什么这么做， 我们在后续分析Netty的线
+         * 程模型时会介绍
+         */
         channel.eventLoop().execute(new Runnable() {
             @Override
             public void run() {
@@ -449,6 +488,12 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
     }
 
+    /**
+     *
+     * @param channel
+     * @param options
+     * @param logger
+     */
     static void setChannelOptions(
             Channel channel, Map.Entry<ChannelOption<?>, Object>[] options, InternalLogger logger) {
         for (Map.Entry<ChannelOption<?>, Object> e: options) {
@@ -456,6 +501,13 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
     }
 
+    /**
+     *
+     * @param channel
+     * @param option
+     * @param value
+     * @param logger
+     */
     @SuppressWarnings("unchecked")
     private static void setChannelOption(
             Channel channel, ChannelOption<?> option, Object value, InternalLogger logger) {

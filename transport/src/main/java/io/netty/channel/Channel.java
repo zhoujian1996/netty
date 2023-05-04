@@ -30,6 +30,8 @@ import java.net.SocketAddress;
 /**
  * A nexus to a network socket or a component which is capable of I/O
  * operations such as read, write, connect, and bind.
+ * Channel可以理解为一个网络连接， 或者具有IO操作能力（读、写、 连接、 绑定） 的组件。
+ * 这里的Channel， 由于是在服务启动的时候创建的， 可以和Socket编程中的ServerSocket对应， 也就是上述Netty官方定义中的IO组件的概念
  * <p>
  * A channel provides a user:
  * <ul>
@@ -174,6 +176,8 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
 
     /**
      * Returns an <em>internal-use-only</em> object that provides unsafe operations.
+     * 这里需要说下Channel.Unsafe接口，对于bind()、write()、read()等这类方法，由于需要和底层API交互，Netty对开发者屏蔽了底层实现，不希望由开发者调用这类方法，于是将它们封装到Channel.Unsafe中，从名字中也能看出来，这些操作是不安全的，开发者尽量不要去自己调用。
+
      */
     Unsafe unsafe();
 
@@ -205,6 +209,15 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
      *   <li>{@link #deregister(ChannelPromise)}</li>
      *   <li>{@link #voidPromise()}</li>
      * </ul>
+     *
+     *  Unsafe 是 Netty 中的一个类，主要用于提供一些底层的、不安全的操作接口，例如读写内存缓冲区、分配内存、注册事件等。
+     *  它是 Netty 中实现高性能和低延迟的关键之一。
+     *
+     * Unsafe 类中定义了一系列底层操作的接口，这些接口都是基于直接内存访问的，
+     * 可以避免不必要的上下文切换和数据拷贝，从而提高了 Netty 的性能和响应速度。但是由于这些操作都是直接访问内存和底层事件的，
+     * 所以如果使用不当可能会导致一些安全问题，因此需要特别小心使用。
+     * 在 Netty 的实现中，Unsafe 类通常被绑定到一个具体的通道（Channel）实例上，开发人员可以通过 channel().unsafe() 方法获取通道绑定的 Unsafe 实例，并使用它来进行底层操作。
+     * 需要注意的是，Unsafe 类是 Netty 内部使用的，不应该在应用程序中直接使用。开发人员可以通过继承 Netty 的相关类来扩展自己的业务逻辑，而不需要直接使用 Unsafe 类。
      */
     interface Unsafe {
 

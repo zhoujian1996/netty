@@ -175,6 +175,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     /**
      * @deprecated Please use and override {@link #newTaskQueue(int)}.
+     * 这里最关键的代码其实只有一行， 其作用是创建一个任务队列，
+     * Netty中所有的异步执行， 本质上都是通过这个任务队列来协调完成
+     * 的。
+     * 这里的newTaskQueue是一个protected方法， 在NioEventLoop中被重
+     * 写
      */
     @Deprecated
     protected Queue<Runnable> newTaskQueue() {
@@ -831,6 +836,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         execute(ObjectUtil.checkNotNull(task, "task"), false);
     }
 
+    /**
+     *
+     * @param task
+     * @param immediate
+     */
     private void execute(Runnable task, boolean immediate) {
         boolean inEventLoop = inEventLoop();
         addTask(task);
@@ -947,6 +957,10 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
+    /**
+     *可以看到， Netty会判断Reactor线程有没有被启动。 如果没有被启
+     * 动， 则调用doStartThread方法启动线程
+     */
     private void startThread() {
         if (state == ST_NOT_STARTED) {
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
@@ -981,9 +995,24 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         return false;
     }
 
+    /**
+     * 启动县城
+     * 在执行doStartThread的时候， 会调用内部成员变量executor的
+     * execute方法， 而根据我们在第22.1.3节的分析， executor就是
+     * ThreadPerTaskExecutor， 这个对象的作用就是每次执行runnable的时
+     * 候， 都会先创建一个线程再执行
+     */
     private void doStartThread() {
         assert thread == null;
         executor.execute(new Runnable() {
+            /**
+             * 在这个runnable中， 通过一个成员变量thread来保存
+             * ThreadPerTaskExecutor创建出来的线程， 这个线程就是我们在第22.1.3
+             * 节中分析的FastThreadLocalThread。 至此， 我们终于知道， 一个
+             * NioEventLoop是如何与一个线程实体绑定的： NioEventLoop通过
+             * ThreadPerTaskExecutor创建一个FastThreadLocalThread， 然后通过一个
+             * 成员变量来指向这个线程
+             */
             @Override
             public void run() {
                 thread = Thread.currentThread();
@@ -994,6 +1023,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    // NioEventLoop保存完线程的引用之后， 随即调用run方法。 这个run
+                    //方法就是Netty Reactor的核心所在
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {

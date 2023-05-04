@@ -46,9 +46,14 @@ import java.util.Map;
  * NIO selector based implementation to accept new connections.
  */
 public class NioServerSocketChannel extends AbstractNioMessageChannel
-                             implements io.netty.channel.socket.ServerSocketChannel {
+        implements io.netty.channel.socket.ServerSocketChannel {
 
-    private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
+    private static final ChannelMetadata METADATA =
+            new ChannelMetadata(false, 16);
+
+    // SelectorProvider 是 JDK 中的一个抽象类，它提供了创建和管理 Selector 对象的方法。
+    // Selector 是 Java NIO 中的一个核心类，它提供了一种异步 I/O 操作的机制，
+    // 可以监视多个通道的事件并选择相应的通道进行操作，使得单线程可以处理多个连接。
     private static final SelectorProvider DEFAULT_SELECTOR_PROVIDER = SelectorProvider.provider();
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NioServerSocketChannel.class);
@@ -56,10 +61,19 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     private static final Method OPEN_SERVER_SOCKET_CHANNEL_WITH_FAMILY =
             SelectorProviderUtil.findOpenMethod("openServerSocketChannel");
 
+    /**
+     * 获取JDK中对应的Channel
+     *
+     * @param provider
+     * @param family
+     * @return
+     */
     private static ServerSocketChannel newChannel(SelectorProvider provider, InternetProtocolFamily family) {
         try {
+            // 通过SelectorProvider.openServerSocketChannel()创建一个ServerSocketChannel对象， 这个对象就是JDK领域的对象
             ServerSocketChannel channel =
                     SelectorProviderUtil.newChannel(OPEN_SERVER_SOCKET_CHANNEL_WITH_FAMILY, provider, family);
+           // sun.nio.ch.ServerSocketChannelImpl[unbound]
             return channel == null ? provider.openServerSocketChannel() : channel;
         } catch (IOException e) {
             throw new ChannelException("Failed to open a socket.", e);
@@ -79,6 +93,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance using the given {@link SelectorProvider}.
      */
     public NioServerSocketChannel(SelectorProvider provider) {
+        // mac系统下调试provider对应的类：KqueueSelectorProvider
         this(provider, null);
     }
 
@@ -86,14 +101,21 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance using the given {@link SelectorProvider} and protocol family (supported only since JDK 15).
      */
     public NioServerSocketChannel(SelectorProvider provider, InternetProtocolFamily family) {
+        // newChannel(provider, family) jdK中对应的channel
         this(newChannel(provider, family));
     }
 
     /**
      * Create a new instance using the given {@link ServerSocketChannel}.
+     *  channel: jdk中的channel sun.nio.ch.ServerSocketChannelImpl[unbound]
      */
     public NioServerSocketChannel(ServerSocketChannel channel) {
+        // 即前面层层传入的SelectionKey.OP_ACCEPT， 表示
+        //这个服务端Channel关心的是ACCEPT事件， 即处理新连接的接入。
+        // 调用上层的
         super(null, channel, SelectionKey.OP_ACCEPT);
+        // ChannelConfig也是Netty里的一个基本组件， 初次看源码， 看到这里， 我们大可不必深挖这个对象， 而是在用到的时候再回来深究。
+        // 只要记住， 这个对象在创建NioServerSocketChannel对象的时候被创建即可。
         config = new NioServerSocketChannelConfig(this, javaChannel().socket());
     }
 
@@ -136,6 +158,9 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     @SuppressJava6Requirement(reason = "Usage guarded by java version check")
     @Override
+    /**
+     * 调用JDK底层绑定端口
+     */
     protected void doBind(SocketAddress localAddress) throws Exception {
         if (PlatformDependent.javaVersion() >= 7) {
             javaChannel().bind(localAddress, config.getBacklog());

@@ -19,6 +19,12 @@ import io.netty.util.internal.UnstableApi;
 
 /**
  * Factory that creates new {@link EventExecutorChooser}s.
+ * 在传统的NIO编程中， 一个新连接被创建后， 通常需要给这个连接
+ * 绑定一个Selector， 之后这个连接的整个生命周期都由这个Selector管
+ * 理。 而从上面的代码中， 我们分析到， Netty中一个Selector对应一个
+ * NioEventLoop， 线程选择器的作用正是为一个连接在一个
+ * EventLoopGroup中选择一个NioEventLoop， 从而将这个连接绑定到某个
+ * Selector上
  */
 @UnstableApi
 public interface EventExecutorChooserFactory {

@@ -49,6 +49,9 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
      * @see MultithreadEventExecutorGroup#MultithreadEventExecutorGroup(int, Executor, Object...)
      */
     protected MultithreadEventLoopGroup(int nThreads, Executor executor, Object... args) {
+        //如果没有设置程序启动参数， 那么默认线程的个数为
+        //CPU核数乘以2， 默认线程数为两倍CPU核数这个知识点在后面的内容
+        //中还会用到，我的机器是12核的，所以这里是24 machdep.cpu.thread_count: 12
         super(nThreads == 0 ? DEFAULT_EVENT_LOOP_THREADS : nThreads, executor, args);
     }
 
@@ -61,10 +64,11 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
 
     /**
      * @see MultithreadEventExecutorGroup#MultithreadEventExecutorGroup(int, Executor,
-     * EventExecutorChooserFactory, Object...)
+     * EventExecutorChooserFactory, Object...) * 参数太多，以后也可能会改变，后面的参数直接用Object...接收了
      */
     protected MultithreadEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory,
                                      Object... args) {
+        // 如果nThreads=0，则默认为CPU核心数*2
         super(nThreads == 0 ? DEFAULT_EVENT_LOOP_THREADS : nThreads, executor, chooserFactory, args);
     }
 
@@ -81,6 +85,7 @@ public abstract class MultithreadEventLoopGroup extends MultithreadEventExecutor
     @Override
     protected abstract EventLoop newChild(Executor executor, Object... args) throws Exception;
 
+    // 多线程eventLoop就会根据轮训的next算法选择一个EventExecutorChooserFactory.EventExecutorChooser chooser;
     @Override
     public ChannelFuture register(Channel channel) {
         return next().register(channel);

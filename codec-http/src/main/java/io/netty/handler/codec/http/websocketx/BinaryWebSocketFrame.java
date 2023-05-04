@@ -23,7 +23,7 @@ import io.netty.buffer.Unpooled;
  */
 public class BinaryWebSocketFrame extends WebSocketFrame {
 
-    /**
+    /**xx
      * Creates a new empty binary frame.
      */
     public BinaryWebSocketFrame() {

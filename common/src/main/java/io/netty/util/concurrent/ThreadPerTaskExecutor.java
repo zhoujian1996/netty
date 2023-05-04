@@ -20,6 +20,11 @@ import io.netty.util.internal.ObjectUtil;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 
+/**
+ * 这个类的作用是， 每次执行execute方法的时候， 都会调用
+ * threadFactory来创建一个线程， 把需要执行的命令传递进去， 然后执
+ * 行。
+ */
 public final class ThreadPerTaskExecutor implements Executor {
     private final ThreadFactory threadFactory;
 
@@ -27,6 +32,12 @@ public final class ThreadPerTaskExecutor implements Executor {
         this.threadFactory = ObjectUtil.checkNotNull(threadFactory, "threadFactory");
     }
 
+    /**
+     *  /*
+     *     执行任务时，利用ThreadFactory创建一个新线程去跑。
+     *     EventLoop会在第一次execute()时调用该方法，整个生命周期只会调用一次，
+     *     即每个EventLoop只会创建一个线程，后续所有的任务，都是在run()方法里无限轮询去执行。
+     *      */
     @Override
     public void execute(Runnable command) {
         threadFactory.newThread(command).start();

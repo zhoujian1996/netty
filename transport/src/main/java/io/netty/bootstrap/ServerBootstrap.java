@@ -78,6 +78,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
      * Set the {@link EventLoopGroup} for the parent (acceptor) and the child (client). These
      * {@link EventLoopGroup}'s are used to handle all the events and IO for {@link ServerChannel} and
      * {@link Channel}'s.
+     * 设置 eventGroup
      */
     public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGroup) {
         super.group(parentGroup);
@@ -129,25 +130,40 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 1、设置服务端channel的Option与Attr
         setChannelOptions(channel, newOptionsArray(), logger);
         setAttributes(channel, newAttributesArray());
 
-        ChannelPipeline p = channel.pipeline();
-
+        // 2、设置客户端Channel的Option与Attr,保存新连接对应的Option与Attr
         final EventLoopGroup currentChildGroup = childGroup;
         final ChannelHandler currentChildHandler = childHandler;
         final Entry<ChannelOption<?>, Object>[] currentChildOptions = newOptionsArray(childOptions);
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = newAttributesArray(childAttrs);
 
+        // 3、配置服务端启动逻辑
+        ChannelPipeline p = channel.pipeline();
+        /**
+         * 到了最后一步—p.addLast()， 用于定义服务端启动过程中需要执行
+         * 哪些逻辑。 在上述代码中， 我们看到， Netty把服务端启动过程中需要
+         * 执行的逻辑分为两块， 一块是添加用户自定义的处理逻辑到服务端启动
+         * 流程， 另一块是添加一个特殊的处理逻辑。 我们重点分析第二块逻辑
+         *
+         * 从名字上就可以看出来， ServerBootstrapAcceptor是一个接入器， 接
+         * 受新请求， 把新的请求传递给某个事件循环器。 我们先不对这个类的原
+         * 理做过多分析， 在后面的章节中， 我们还会再次遇到这个类。
+         */
         p.addLast(new ChannelInitializer<Channel>() {
+
             @Override
             public void initChannel(final Channel ch) {
+                // 添加用户自定义的handler
                 final ChannelPipeline pipeline = ch.pipeline();
                 ChannelHandler handler = config.handler();
                 if (handler != null) {
                     pipeline.addLast(handler);
                 }
 
+                // 添加一个特殊的hanlder，用于接受新链接
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {

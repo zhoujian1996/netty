@@ -35,11 +35,7 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.io.IOException;
 import java.net.SocketAddress;
-import java.nio.channels.CancelledKeyException;
-import java.nio.channels.ClosedChannelException;
-import java.nio.channels.ConnectionPendingException;
-import java.nio.channels.SelectableChannel;
-import java.nio.channels.SelectionKey;
+import java.nio.channels.*;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -52,7 +48,18 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     private final SelectableChannel ch;
     protected final int readInterestOp;
+    // SelectionKey 是 Java NIO 中的一个类，它表示一个注册在 Selector 对象上的通道以及它们关注的事件。
+    // 在通道注册到 Selector 之后，Selector 就会监视通道上的事件，当一个或多个事件就绪时，Selector 会通知对应的 SelectionKey。
+//    SelectionKey 包含了四个标志位，分别表示该通道对应的事件是否就绪以及该事件是否已经被处理。这些标志位分别是：
+//
+//    OP_READ：表示通道上的读事件是否就绪
+//    OP_WRITE：表示通道上的写事件是否就绪
+//    OP_CONNECT：表示通道上的连接事件是否就绪
+//    OP_ACCEPT：表示通道上的接受连接事件是否就绪
+//    当一个事件就绪时，对应的标志位会被置为 true。开发人员可以使用 interestOps() 方法来注册关注的事件，使用 readyOps() 方法来查询就绪的事件，使用 isReadable()、isWritable()、isConnectable() 和 isAcceptable() 方法来判断对应的事件是否就绪。
     volatile SelectionKey selectionKey;
+
+
     boolean readPending;
     private final Runnable clearReadPendingRunnable = new Runnable() {
         @Override
@@ -78,10 +85,18 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      */
     protected AbstractNioChannel(Channel parent, SelectableChannel ch, int readInterestOp) {
         super(parent);
-        this.ch = ch;
+//        这里简单地将前面provider.openServerSocketChannel()创建出来的
+//        ServerSocketChannel保存到成员变量ch， 然后调用
+//        ch.configureBlocking(false)设置该Channel为非阻塞模式， Java NIO开发
+//        的同学看到这里应该比较面熟了吧？
+//        readInterestOp， 即前面层层传入的SelectionKey.OP_ACCEPT， 表示
+//        这个服务端Channel关心的是ACCEPT事件， 即处理新连接的接
+        this.ch = ch; // sun.nio.ch.ServerSocketChannelImpl[unbound]  // 通过SelectorProvider.openServerSocketChannel()创建一个ServerSocketChannel对象， 这个对象就是JDK领域的对象
+//        ServerSocketChannel channel =
+//                SelectorProviderUtil.newChannel(OPEN_SERVER_SOCKET_CHANNEL_WITH_FAMILY, provider, family);
         this.readInterestOp = readInterestOp;
         try {
-            ch.configureBlocking(false);
+            ch.configureBlocking(false); // Adjusts this channel's blocking mode. 设置为非阻塞模式
         } catch (IOException e) {
             try {
                 ch.close();
@@ -189,6 +204,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
     /**
      * Special {@link Unsafe} sub-type which allows to access the underlying {@link SelectableChannel}
+     * SelectableChannel ： A channel that can be multiplexed via a Selector.
+     *
      */
     public interface NioUnsafe extends Unsafe {
         /**
@@ -372,12 +389,25 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         return loop instanceof NioEventLoop;
     }
 
+    /**
+     * 调用JDK底层注册Selector // 真正调用JDK底层API完成注册
+     * @throws Exception
+     * 在这个步骤中， 我们可以看到关于JDK底层的操作： 首先拿到在前
+     * 面过程中创建的JDK底层的Channel， 然后调用JDK的register()方法， 将
+     * this也即NioServerSocketChannel对象当作attachment绑定到JDK的Selector
+     * 上， 这样后续从Selector拿到对应的事件之后， 就可以把Netty领域的
+     * Channel拿出来。 读者需要记下这个知识点， 后面会用到。
+     */
     @Override
     protected void doRegister() throws Exception {
         boolean selected = false;
         for (;;) {
             try {
-                selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
+                // 获取Java原生SocketChannel注册到未包装的原生Selector上
+                // 完成SocketChannel的注册后，EventLoop就可以通过轮询Selector来监听准备就绪的Channel了，后面就是一系列的事件处理了。
+                //  eventLoop().unwrappedSelector():原声的selector，一个eventLoop对应一个Selector
+                // javaChannel：底层的jdkchannel 绑定到 jdk底层的slector上
+                selectionKey = javaChannel().register( eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {
                 if (!selected) {
@@ -399,6 +429,13 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         eventLoop().cancel(selectionKey());
     }
 
+
+    /**
+     * 这里的this.selectionKey就是我们在前面register步骤返回的对象。 我
+     * 们在register的时候， 注册ops的值是0， 表示此时还不关注任何事件， 只
+     * 是建立绑定关系而已。
+     * @throws Exception
+     */
     @Override
     protected void doBeginRead() throws Exception {
         // Channel.read() or ChannelHandlerContext.read() was called
@@ -411,6 +448,11 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
         final int interestOps = selectionKey.interestOps();
         if ((interestOps & readInterestOp) == 0) {
+            // 里相当于把注册过的ops取了出来， 通过了if条件， 然后调用
+            // 而这里的readInterestOp就是前面newChannel的时候传入的
+            //SelectionKey.OP_ACCEPT， 所以， 在这一部分代码中， Netty实际上想
+            //做的就是， 告诉JDK的Selector， 现在一切工作就绪， 就差把ACCEPT事
+            //件注册到Selector上了
             selectionKey.interestOps(interestOps | readInterestOp);
         }
     }

@@ -18,9 +18,7 @@ package io.netty.util.concurrent;
 import io.netty.util.internal.UnstableApi;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
-
 import org.jetbrains.annotations.Async.Execute;
-import org.jetbrains.annotations.Async.Schedule;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -61,6 +59,16 @@ public abstract class AbstractEventExecutor extends AbstractExecutorService impl
         return this;
     }
 
+    /**
+     * 首先调用重载方法， 将当前线程， 也就是main方法对应的主线程传
+     * 递进来， 然后将这个线程与this.thread进行比较。 由于this.thread此时并
+     * 未赋值， 所以为空， 因而返回false。
+     * 另外， 我们在Netty的源码中， 会在很多地方看到inEventLoop这样
+     * 的判断， 这个方法的本质含义就是判断当前线程是否是Netty的Reactor
+     * 线程， 也就是NioEventLoop对应的线程实体。 后面我们会看到， 创建一
+     * 个线程之后， 会将这个线程实体保存到thread这个成员变量中。
+     * @return
+     */
     @Override
     public boolean inEventLoop() {
         return inEventLoop(Thread.currentThread());

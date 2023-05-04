@@ -30,6 +30,14 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
 
     private DefaultEventExecutorChooserFactory() { }
 
+    /**
+     *比较有意思的是， Netty通过判断NioEventLoopGroup中的
+     * NioEventLoop是否是2的幂来创建不同的线程选择器， 不管是哪一种选
+     * 择器， 最终效果都是从第一个NioEvenLoop遍历到最后一个
+     * NioEventLoop， 再从第一个开始， 如此循环。
+     * @param executors
+     * @return
+     */
     @Override
     public EventExecutorChooser newChooser(EventExecutor[] executors) {
         if (isPowerOfTwo(executors.length)) {
@@ -43,6 +51,7 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         return (val & -val) == val;
     }
 
+    // 而PowerOfTowEventExecutorChooser是通过位运算实现的。
     private static final class PowerOfTwoEventExecutorChooser implements EventExecutorChooser {
         private final AtomicInteger idx = new AtomicInteger();
         private final EventExecutor[] executors;
@@ -57,6 +66,8 @@ public final class DefaultEventExecutorChooserFactory implements EventExecutorCh
         }
     }
 
+    // GenericEventExecutorChooser通过简单的累加取模来实现循环的逻
+    //辑。
     private static final class GenericEventExecutorChooser implements EventExecutorChooser {
         // Use a 'long' counter to avoid non-round-robin behaviour at the 32-bit overflow boundary.
         // The 64-bit long solves this by placing the overflow so far into the future, that no system

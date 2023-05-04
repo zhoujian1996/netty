@@ -20,6 +20,12 @@ import java.util.AbstractSet;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
+/**
+ * Selector的 Set<SelectionKey> selectedKeys
+ * 默认用HashSet存储，当有Channel准备就绪时，会添加到HashSet中，但如果发生冲突，HashSet的时间复杂度是O(n)链表/O(log n)红黑树
+ * Netty通过反射将selectedKeys、publicSelectedKeys替换成SelectedSelectionKeySet
+ * 使用数组来避免哈希冲突
+ */
 
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
 

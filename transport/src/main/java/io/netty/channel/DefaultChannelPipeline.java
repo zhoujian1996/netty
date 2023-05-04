@@ -1417,6 +1417,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
             readIfIsAutoRead();
         }
 
+        /**
+         *
+         */
         private void readIfIsAutoRead() {
             if (channel.config().isAutoRead()) {
                 channel.read();

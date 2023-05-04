@@ -40,6 +40,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
     /**
      * Create a new instance using the default number of threads, the default {@link ThreadFactory} and
      * the {@link SelectorProvider} which is returned by {@link SelectorProvider#provider()}.
+     * 构造函数比较多，其实本质上是层层递进的一个关系
      */
     public NioEventLoopGroup() {
         this(0);
@@ -121,18 +122,19 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
     }
 
     /**
-     * @param nThreads the number of threads that will be used by this instance.
-     * @param executor the Executor to use, or {@code null} if default one should be used.
-     * @param chooserFactory the {@link EventExecutorChooserFactory} to use.
-     * @param selectorProvider the {@link SelectorProvider} to use.
-     * @param selectStrategyFactory the {@link SelectStrategyFactory} to use.
-     * @param rejectedExecutionHandler the {@link RejectedExecutionHandler} to use.
-     * @param taskQueueFactory the {@link EventLoopTaskQueueFactory} to use for
+     * @param nThreads the number of threads that will be used by this instance. 线程数量，就是NioEventLoop的数量，默认CPU核心数*2
+     * @param executor the Executor to use, or {@code null} if default one should be used. NioEventLoop.run()的执行者，默认为ThreadPerTaskExecutor，NioEventLoop将利用它来启动一个FastThreadLocalThread并执行
+     * @param chooserFactory the {@link EventExecutorChooserFactory} to use. 选择器工厂，默认DefaultEventExecutorChooserFactory，轮询选择NioEventLoop
+     * @param selectorProvider the {@link SelectorProvider} to use. 多路复用器提供者，DefaultSelectorProvider.create()
+     * @param selectStrategyFactory the {@link SelectStrategyFactory} to use. select策略工厂，指示EventLoop应该要做什么事情
+     * @param rejectedExecutionHandler the {@link RejectedExecutionHandler} to use. 拒绝策略
+     * @param taskQueueFactory the {@link EventLoopTaskQueueFactory} to use for 任务队列工厂，默认PlatformDependent.newMpscQueue()，Netty实现的高性能无锁队列
      *                         {@link SingleThreadEventLoop#execute(Runnable)},
      *                         or {@code null} if default one should be used.
      * @param tailTaskQueueFactory the {@link EventLoopTaskQueueFactory} to use for
      *                             {@link SingleThreadEventLoop#executeAfterEventLoopIteration(Runnable)},
      *                             or {@code null} if default one should be used.
+     *                             NioEventLoopGroup会把参数传给父类构造器MultithreadEventLoopGroup，这里会对nThreads进行初始化设置：
      */
     public NioEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory,
                              SelectorProvider selectorProvider,
@@ -164,11 +166,21 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
         }
     }
 
+    /**
+     * 创建EvvebtLoop
+     *
+     * @param executor
+     * @param args
+     * @return
+     * @throws Exception
+     */
     @Override
     protected EventLoop newChild(Executor executor, Object... args) throws Exception {
+       // args传递进来的擦拿书
         SelectorProvider selectorProvider = (SelectorProvider) args[0];
         SelectStrategyFactory selectStrategyFactory = (SelectStrategyFactory) args[1];
         RejectedExecutionHandler rejectedExecutionHandler = (RejectedExecutionHandler) args[2];
+
         EventLoopTaskQueueFactory taskQueueFactory = null;
         EventLoopTaskQueueFactory tailTaskQueueFactory = null;
 
@@ -179,6 +191,7 @@ public class NioEventLoopGroup extends MultithreadEventLoopGroup {
         if (argsLength > 4) {
             tailTaskQueueFactory = (EventLoopTaskQueueFactory) args[4];
         }
+        //     // 创建NioEventLoop
         return new NioEventLoop(this, executor, selectorProvider,
                 selectStrategyFactory.newSelectStrategy(),
                 rejectedExecutionHandler, taskQueueFactory, tailTaskQueueFactory);
